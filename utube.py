@@ -67,9 +67,18 @@ if selected=="Explore":
     with col1:
         st.header(':red[Data collection zone]')
         st.write ('(Note:- This zone **collect data** by using channel id and **stored it in the :green[MongoDB] database**.)')
-        channel_id = st.text_input('**Enter 11 digit channel_id**')
+        channel_id = st.text_input('**Enter 11 digit channel_id**',)
         st.write('''Get data and stored it in the MongoDB database to click below **:red['Get data and stored']**.''')
         Get_data = st.button('**Get data and stored**')
+
+        if Get_data:
+            try:
+                if len(channel_id) == 11:
+                    st.success('Data has been collected and stored in the MongoDB database.')
+                else:
+                  raise ValueError('Invalid channel_id length')
+            except ValueError as e:
+                 st.error(f'Error: {e}')
 
 
         def convert_duration(duration):
@@ -97,85 +106,91 @@ if selected=="Explore":
         )
 
         response = request.execute()
-        df = pd.DataFrame(response["items"])
-        channel_data = response
 
-        channel_name = channel_data['items'][0]['snippet']['title']
-        channel_video_count = channel_data['items'][0]['statistics']['videoCount']
-        channel_subscriber_count = channel_data['items'][0]['statistics']['subscriberCount']
-        channel_view_count = channel_data['items'][0]['statistics']['viewCount']
-        channel_description = channel_data['items'][0]['snippet']['description']
-        channel_playlist_id = channel_data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+        if 'items' not in response:
+         st.error("No data found for the provided channel ID or API quota exceeded.")
+        else:
+            df = pd.DataFrame(response["items"])
 
-        channel = {"Channel_Details": {
-                        "Channel_Name": channel_name,
-                        "Channel_Id": channel_id,
-                        "Video_Count": channel_video_count,
-                        "Subscriber_Count": channel_subscriber_count,
-                        "Channel_Views": channel_view_count,
-                        "Channel_Description": channel_description,
-                        "Playlist_Id": channel_playlist_id
+
+            channel_data = response
+
+            channel_name = channel_data['items'][0]['snippet']['title']
+            channel_video_count = channel_data['items'][0]['statistics']['videoCount']
+            channel_subscriber_count = channel_data['items'][0]['statistics']['subscriberCount']
+            channel_view_count = channel_data['items'][0]['statistics']['viewCount']
+            channel_description = channel_data['items'][0]['snippet']['description']
+            channel_playlist_id = channel_data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+
+            channel = {"Channel_Details": {
+                            "Channel_Name": channel_name,
+                            "Channel_Id": channel_id,
+                            "Video_Count": channel_video_count,
+                            "Subscriber_Count": channel_subscriber_count,
+                            "Channel_Views": channel_view_count,
+                            "Channel_Description": channel_description,
+                            "Playlist_Id": channel_playlist_id
+                        }
                     }
-                }
 
-        videos = {}
-        request = youtube.playlistItems().list(
-                            part='snippet,contentDetails',
-                            playlistId=channel_playlist_id,
-                            maxResults=50,
-                            )
-        response1 = request.execute()
-        index = 1
-        for item in response1['items']:
-            request = youtube.videos().list(part='snippet, statistics, contentDetails', id=item['contentDetails']['videoId'])
-            response3 = request.execute()
-            
-            for item1 in response3["items"]:
-                convertedTime = convert_duration(item1["contentDetails"]["duration"])
-                item1["contentDetails"]["duration"] = convertedTime
-                requestComments = youtube.commentThreads().list(part='snippet', maxResults=2, textFormat="plainText", videoId = item['contentDetails']['videoId'] )
-                response4 = requestComments.execute()
-                comments = response4.get("items", [])
-                commentsList = {}
-            
-            for i in range(0,len(comments)):
-                commentsList[f"comment_Id_{i+1}"] = {
-                    "authorChannelId" : comments[i]["snippet"]["topLevelComment"]["snippet"]["authorChannelId"],
-                    "commentAuthor" : comments[i]["snippet"]["topLevelComment"]["snippet"]["authorDisplayName"],
-                    "commentText" : comments[i]["snippet"]["topLevelComment"]["snippet"]["textDisplay"],
-                    "commentPublishedAt" : comments[i]["snippet"]["topLevelComment"]["snippet"]["publishedAt"]
-                }
+            videos = {}
+            request = youtube.playlistItems().list(
+                                part='snippet,contentDetails',
+                                playlistId=channel_playlist_id,
+                                maxResults=50,
+                                )
+            response1 = request.execute()
+            index = 1
+            for item in response1['items']:
+                request = youtube.videos().list(part='snippet, statistics, contentDetails', id=item['contentDetails']['videoId'])
+                response3 = request.execute()
                 
-                videos[f"Video_Id_{index}"] = {
-                    "video_id" : item['contentDetails']['videoId'],
-                    "videoPublishedAt" : item['contentDetails']['videoPublishedAt'],
-                    "title" : item1["snippet"]["title"],
-                    "description" : item1["snippet"]["description"],
-                    "viewCount" : item1["statistics"]["viewCount"],
-                    "likeCount" : item1["statistics"]["likeCount"],
-                    "favoriteCount" : item1["statistics"]["favoriteCount"],
-                    "commentCount" : item1["statistics"]["commentCount"],
-                    "duration" : item1["contentDetails"]["duration"],
-                    "comments" : commentsList
-                }
+                for item1 in response3["items"]:
+                    convertedTime = convert_duration(item1["contentDetails"]["duration"])
+                    item1["contentDetails"]["duration"] = convertedTime
+                    requestComments = youtube.commentThreads().list(part='snippet', maxResults=2, textFormat="plainText", videoId = item['contentDetails']['videoId'] )
+                    response4 = requestComments.execute()
+                    comments = response4.get("items", [])
+                    commentsList = {}
                 
-                index += 1
-        finalData = {**channel, **videos}
-        
-        
-        client = pymongo.MongoClient("mongodb+srv://SUNIL:12345@cluster0.4p2eeut.mongodb.net/?retryWrites=true&w=majority")
-        try:
-            client.admin.command('ping')
-            st.write("")
-            st.write("")
-            st.success("Pinged your deployment. You successfully connected to MongoDB!")
-        except Exception as e:
-            st.write(e)
-        client=MongoClient("mongodb+srv://SUNIL:12345@cluster0.4p2eeut.mongodb.net/?retryWrites=true&w=majority")
-        db=client.youtube
-        records=db.youtube_data
-        records.replace_one({'_id':channel_id},finalData,upsert=True)
-        client.close()
+                for i in range(0,len(comments)):
+                    commentsList[f"comment_Id_{i+1}"] = {
+                        "authorChannelId" : comments[i]["snippet"]["topLevelComment"]["snippet"]["authorChannelId"],
+                        "commentAuthor" : comments[i]["snippet"]["topLevelComment"]["snippet"]["authorDisplayName"],
+                        "commentText" : comments[i]["snippet"]["topLevelComment"]["snippet"]["textDisplay"],
+                        "commentPublishedAt" : comments[i]["snippet"]["topLevelComment"]["snippet"]["publishedAt"]
+                    }
+                    
+                    videos[f"Video_Id_{index}"] = {
+                        "video_id" : item['contentDetails']['videoId'],
+                        "videoPublishedAt" : item['contentDetails']['videoPublishedAt'],
+                        "title" : item1["snippet"]["title"],
+                        "description" : item1["snippet"]["description"],
+                        "viewCount" : item1["statistics"]["viewCount"],
+                        "likeCount" : item1["statistics"]["likeCount"],
+                        "favoriteCount" : item1["statistics"]["favoriteCount"],
+                        "commentCount" : item1["statistics"]["commentCount"],
+                        "duration" : item1["contentDetails"]["duration"],
+                        "comments" : commentsList
+                    }
+                    
+                    index += 1
+            finalData = {**channel, **videos}
+            
+            
+            client = pymongo.MongoClient("mongodb+srv://SUNIL:12345@cluster0.4p2eeut.mongodb.net/?retryWrites=true&w=majority")
+            try:
+                client.admin.command('ping')
+                st.write("")
+                st.write("")
+                st.success("Pinged your deployment. You successfully connected to MongoDB!")
+            except Exception as e:
+                st.write(e)
+            client=MongoClient("mongodb+srv://SUNIL:12345@cluster0.4p2eeut.mongodb.net/?retryWrites=true&w=majority")
+            db=client.youtube
+            records=db.youtube_data
+            records.replace_one({'_id':channel_id},finalData,upsert=True)
+            client.close()
 
     with col2:
         st.header(':red[Data Migrate zone]')
