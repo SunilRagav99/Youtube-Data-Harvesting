@@ -178,22 +178,24 @@ if selected=="Data Collection Zone":
                             
                             
 
-                    
-                    
-                    videos[f"Video_Id_{index}"] = {
-                        "video_id" : item['contentDetails']['videoId'],
-                        "videoPublishedAt" : item['contentDetails']['videoPublishedAt'],
-                        "title" : item1["snippet"]["title"],
-                        "description" : item1["snippet"]["description"],
-                        "viewCount" : item1["statistics"]["viewCount"],
-                        "likeCount" : item1["statistics"]["likeCount"],
-                        "favoriteCount" : item1["statistics"]["favoriteCount"],
-                        "commentCount" : item1["statistics"]["commentCount"],
-                        "duration" : item1["contentDetails"]["duration"],
-                        "comments" : commentsList
-                    }
-                    
-                    index += 1
+                    try:
+                    # st.write(item1['statistics'])
+                        videos[f"Video_Id_{index}"] = {
+                            "video_id" : item['contentDetails']['videoId'],
+                            "videoPublishedAt" : item['contentDetails']['videoPublishedAt'],
+                            "title" : item1["snippet"]["title"],
+                            "description" : item1["snippet"]["description"],
+                            "viewCount" : item1["statistics"]["viewCount"],
+                            "likeCount" : item1["statistics"]["likeCount"],
+                            "favoriteCount" : item1["statistics"]["favoriteCount"],
+                            "commentCount" : item1["statistics"]["commentCount"],
+                            "duration" : item1["contentDetails"]["duration"],
+                            "comments" : commentsList
+                        }
+                        
+                        index += 1
+                    except:
+                        pass
             finalData = {**channel, **videos}
             if Get_data and take:
                     st.success("Data collected successfully using Google API requests")
@@ -290,7 +292,10 @@ if selected=="Data Migration Zone":
                 playlist_df = pd.DataFrame.from_dict(playlist_tosql, orient='index').T
                 Comments_df = pd.DataFrame(comment_detail_list)
                 st.success("Migrate to MySQL database from MongoDB database")
-                # st.dataframe(Comments_df)
+                st.dataframe(Comments_df)
+                st.dataframe(channel_df)
+                st.dataframe(playlist_df)
+                st.dataframe(video_df)
                 
 
                 mydb= mysql.connector.connect(
@@ -433,8 +438,8 @@ if selected=="Data Migration Zone":
                 mycursor.execute("""
                                 CREATE TABLE IF NOT EXISTS comment (
                                     Video_Id VARCHAR(255),
-                                    Comment_Id VARCHAR(255) ,
-                                    Comment_Text Text PRIMARY KEY,
+                                    Comment_Id VARCHAR(255) PRIMARY KEY,
+                                    Comment_Text VARCHAR(3072) ,
                                     Comment_Author VARCHAR(255),
                                     CommentPublishedAt VARCHAR(225)
                                                     )
@@ -442,7 +447,7 @@ if selected=="Data Migration Zone":
                 try:
                     for i, row in Comments_df.iterrows():
                         sql_insert =  """
-                        INSERT INTO comment (
+                        INSERT ignore INTO comment (
                             Video_Id, Comment_Id, Comment_Text, Comment_Author, CommentPublishedAt) VALUES (%s, %s, %s, %s, %s)
                                                                                                 """
                         
@@ -454,17 +459,17 @@ if selected=="Data Migration Zone":
 
                         mycursor.execute(sql_insert, values_insert)
                         mydb.commit()
-                except mysql.connector.IntegrityError as e:
+                except mysql.connector.IntegrityError or mysql.connector.IntegrityError.errno == 1062:
                     try:
                         sql_update = """UPDATE comment SET
                         Video_Id = %s,
-                        Comment_Id = %s,
+                        Comment_text = %s,
                         Comment_Author = %s,
                         CommentPublishedAt = %s
-                        WHERE Comment_Text = %s 
+                        WHERE Comment_Id = %s 
                         """
-                        values_update = ( row['video_id'], row['Comment_Id'], row['commentAuthor'],
-                            row['commentPublishedAt'], row['commentText']
+                        values_update = ( row['video_id'], row['commentText'], row['commentAuthor'],
+                            row['commentPublishedAt'], row['Comment_Id']
                                             ) 
                                         
                         mycursor.execute(sql_update, values_update)
@@ -472,7 +477,7 @@ if selected=="Data Migration Zone":
                         st.success("Updated channel data for Comment Table")
                         
                     except mysql.connector.Error as update_err:
-                        # st.error(f"Error updating channel data for {row['video_id']}: {update_err}")
+                        st.error(f"Error updating channel data for {row['video_id']}: {update_err}")
                         st.info("updated comments")
                         
 
